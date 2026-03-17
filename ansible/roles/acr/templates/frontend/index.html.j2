@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>CP2 - Frontend AKS guiurm</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 60px auto; background: #f4f4f4; }
+    h1 { color: #107c10; }
+    .info { background: white; border-left: 4px solid #107c10; padding: 16px; margin-top: 20px; border-radius: 4px; }
+    code { background: #eee; padding: 2px 6px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>&#x2705; CP2 - Frontend AKS</h1>
+  <div class="info">
+    <p><strong>Usuario:</strong> guiurm</p>
+    <p><strong>Entorno:</strong> Azure Kubernetes Service (AKS)</p>
+    <p><strong>Imagen:</strong> <code>{{ acr_login_server }}/{{ app_frontend_image_name }}:{{ container_image_tag }}</code></p>
+    <p><strong>Backend:</strong> Redis con PersistentVolumeClaim</p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,25 @@
+---
+# Secret para pull desde ACR
+acr_secret_name: "acr-pull-secret"
+
+# PVC para Redis
+redis_pvc_name: "redis-data-guiurm"
+redis_pvc_storage: "1Gi"
+
+# Definición de la aplicación
+app:
+  backend:
+    name: backend
+    image: "{{ acr_login_server }}/{{ app_backend_image_name }}:{{ container_image_tag }}"
+    replicas: 1
+    port: 6379
+    pvc_name: "{{ redis_pvc_name }}"
+    storage: "{{ redis_pvc_storage }}"
+    access_mode: ReadWriteOnce
+
+  frontend:
+    name: frontend
+    image: "{{ acr_login_server }}/{{ app_frontend_image_name }}:{{ container_image_tag }}"
+    replicas: 1
+    port: 5000
+    service_type: LoadBalancer

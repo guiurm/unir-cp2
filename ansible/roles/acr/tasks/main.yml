@@ -1,0 +1,142 @@
+---
+- name: ACR | Actualizar caché apt
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: ACR | Instalar Podman y utilidades
+  ansible.builtin.apt:
+    name:
+      - podman
+      - apache2-utils
+      - git
+      - python3-passlib
+    state: present
+  become: true
+
+- name: ACR | Crear directorios de build
+  ansible.builtin.file:
+    path: "{{ item.context }}"
+    state: directory
+    mode: "0755"
+    owner: "guiu"
+  loop: "{{ acr_images }}"
+  become: true
+
+- name: ACR | Crear directorio de certificados (webserver)
+  ansible.builtin.file:
+    path: "{{ acr_build_path }}/webserver/certs"
+    state: directory
+    mode: "0755"
+
+- name: ACR | Generar clave privada
+  community.crypto.openssl_privatekey:
+    path: "{{ acr_build_path }}/webserver/certs/key.pem"
+    size: 2048
+    type: RSA
+
+- name: ACR | Generar CSR
+  community.crypto.openssl_csr:
+    path: "{{ acr_build_path }}/webserver/certs/cert.csr"
+    privatekey_path: "{{ acr_build_path }}/webserver/certs/key.pem"
+    country_name: ES
+    state_or_province_name: Aragon
+    locality_name: Huesca
+    organization_name: UNIR
+    organizational_unit_name: CP2
+    common_name: vm-cp2-guiurm
+
+- name: ACR | Generar certificado autofirmado
+  community.crypto.x509_certificate:
+    path: "{{ acr_build_path }}/webserver/certs/cert.pem"
+    privatekey_path: "{{ acr_build_path }}/webserver/certs/key.pem"
+    csr_path: "{{ acr_build_path }}/webserver/certs/cert.csr"
+    provider: selfsigned
+    selfsigned_not_after: "+365d"
+
+- name: ACR | Generar Containerfile (webserver)
+  ansible.builtin.template:
+    src: webserver/Containerfile.j2
+    dest: "{{ acr_build_path }}/webserver/Containerfile"
+    mode: "0644"
+
+- name: ACR | Generar nginx.conf (webserver)
+  ansible.builtin.template:
+    src: webserver/nginx.conf.j2
+    dest: "{{ acr_build_path }}/webserver/nginx.conf"
+    mode: "0644"
+
+- name: ACR | Generar index.html (webserver)
+  ansible.builtin.template:
+    src: webserver/index.html.j2
+    dest: "{{ acr_build_path }}/webserver/index.html"
+    mode: "0644"
+
+- name: ACR | Crear htpasswd (webserver)
+  community.general.htpasswd:
+    path: "{{ acr_build_path }}/webserver/.htpasswd"
+    name: "{{ web_basic_auth_user }}"
+    password: "{{ web_basic_auth_password }}"
+    mode: "0644"
+  no_log: true
+
+- name: ACR | Clonar repositorio del frontend
+  ansible.builtin.git:
+    repo: "https://github.com/Azure-Samples/azure-voting-app-redis.git"
+    dest: "{{ acr_build_path }}/azure-voting-app-redis"
+    version: "master"
+    force: true
+
+- name: ACR | Copiar código al contexto (frontend)
+  ansible.builtin.copy:
+    src: "{{ acr_build_path }}/azure-voting-app-redis/azure-vote/"
+    dest: "{{ acr_build_path }}/frontend/"
+    remote_src: true
+    mode: "0644"
+    owner: "guiu"
+  become: true
+
+- name: ACR | Ajustar permisos (frontend)
+  ansible.builtin.file:
+    path: "{{ acr_build_path }}/frontend"
+    state: directory
+    mode: "0755"
+    owner: "guiu"
+    recurse: true
+  become: true
+
+- name: ACR | Generar Containerfile (frontend)
+  ansible.builtin.template:
+    src: frontend/Containerfile.j2
+    dest: "{{ acr_build_path }}/frontend/azure-vote/Containerfile"
+    mode: "0644"
+
+- name: ACR | Generar Containerfile (backend)
+  ansible.builtin.template:
+    src: backend/Containerfile.j2
+    dest: "{{ acr_build_path }}/backend/Containerfile"
+    mode: "0644"
+
+- name: ACR | Construir imágenes
+  containers.podman.podman_image:
+    name: "{{ acr_login_server }}/{{ item.name }}:{{ container_image_tag }}"
+    path: "{{ item.context }}"
+    build:
+      cache: false
+    state: build
+    force: true
+  loop: "{{ acr_images }}"
+
+- name: ACR | Login en ACR
+  containers.podman.podman_login:
+    registry: "{{ acr_login_server }}"
+    username: "{{ acr_username }}"
+    password: "{{ acr_password }}"
+  no_log: true
+
+- name: ACR | Push de imágenes al ACR
+  containers.podman.podman_image:
+    name: "{{ acr_login_server }}/{{ item.name }}:{{ container_image_tag }}"
+    push: true
+  loop: "{{ acr_images }}"

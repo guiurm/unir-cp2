@@ -1,0 +1,12 @@
+---
+# Directorio de build temporal en el nodo de control
+acr_build_path: "{{ playbook_dir }}/.build"
+
+# Imágenes a construir y subir al ACR
+acr_images:
+  - name: "{{ web_image_name }}"
+    context: "{{ acr_build_path }}/webserver"
+  - name: "{{ app_frontend_image_name }}"
+    context: "{{ acr_build_path }}/frontend/azure-vote"
+  - name: "{{ app_backend_image_name }}"
+    context: "{{ acr_build_path }}/backend"

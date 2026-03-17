@@ -1,0 +1,10 @@
+---
+- name: ACR | Build y push de imágenes
+  hosts: registry
+  gather_facts: false
+  vars_files:
+    - secrets.yml
+  tasks:
+    - name: Ejecutar rol acr
+      ansible.builtin.include_role:
+        name: acr

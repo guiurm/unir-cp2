@@ -1,0 +1,41 @@
+---
+
+# Playbook completo (ACR -> VM -> AKS)
+- name: Build y push al ACR
+  hosts: registry
+  gather_facts: false
+
+  vars_files:
+    - secrets.yml
+
+  tasks:
+    - name: Ejecutar rol acr
+      ansible.builtin.include_role:
+        name: acr
+
+
+- name: Desplegar web en VM (Podman)
+  hosts: web
+  gather_facts: true
+  become: true
+
+  vars_files:
+    - secrets.yml
+
+  tasks:
+    - name: Ejecutar rol vm
+      ansible.builtin.include_role:
+        name: vm
+
+
+- name: Desplegar app en AKS
+  hosts: kubernetes
+  gather_facts: false
+
+  vars_files:
+    - secrets.yml
+
+  tasks:
+    - name: Ejecutar rol aks
+      ansible.builtin.include_role:
+        name: aks

@@ -1,0 +1,9 @@
+---
+# Nombre del contenedor Podman
+web_container_name: "cp2-webserver-guiurm"
+
+# Puerto expuesto en la VM
+web_container_port: 443
+
+# Nombre del servicio systemd
+web_systemd_service: "container-cp2-webserver-guiurm.service"

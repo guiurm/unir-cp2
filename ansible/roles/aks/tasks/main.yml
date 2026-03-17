@@ -1,0 +1,111 @@
+---
+# Rol AKS: despliega frontend Apache + backend Redis con PVC en Kubernetes
+
+# --- Dependencias ---
+- name: "AKS | Instalar cliente Python de Kubernetes"
+  ansible.builtin.apt:
+    name: python3-kubernetes
+    state: present
+  become: true
+
+# --- Obtener kubeconfig ---
+- name: "AKS | Obtener credenciales del clúster AKS"
+  ansible.builtin.command:
+    cmd: >
+      az aks get-credentials
+      --resource-group {{ resource_group_name }}
+      --name {{ aks_name }}
+      --overwrite-existing
+  changed_when: true
+
+# --- Namespace ---
+- name: "AKS | Crear namespace {{ app_namespace }}"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ app_namespace }}"
+
+# --- Secret para pull desde ACR ---
+- name: "AKS | Generar dockerconfigjson para ACR"
+  ansible.builtin.set_fact:
+    acr_dockerconfigjson: >-
+      {{
+        {
+          'auths': {
+            acr_login_server: {
+              'username': acr_username,
+              'password': acr_password,
+              'auth': (acr_username ~ ':' ~ acr_password) | b64encode
+            }
+          }
+        } | to_json | b64encode
+      }}
+  no_log: true
+
+- name: "AKS | Crear secret de pull del ACR"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ acr_secret_name }}"
+        namespace: "{{ app_namespace }}"
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: "{{ acr_dockerconfigjson }}"
+  no_log: true
+
+# --- Desplegar aplicación (PVC + Redis + Apache + Services) ---
+- name: "AKS | Desplegar aplicación completa"
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'app_template.yml.j2') | from_yaml_all | list }}"
+
+# --- Verificación ---
+- name: "AKS | Esperar IP pública del LoadBalancer (máx 3 min)"
+  kubernetes.core.k8s_info:
+    kind: Service
+    name: "{{ app.frontend.name }}"
+    namespace: "{{ app_namespace }}"
+  register: frontend_svc
+  until: >
+    frontend_svc.resources | length > 0 and
+    frontend_svc.resources[0].status.loadBalancer.ingress is defined and
+    frontend_svc.resources[0].status.loadBalancer.ingress | length > 0
+  retries: 18
+  delay: 10
+
+- name: "AKS | URL de acceso al frontend"
+  ansible.builtin.debug:
+    msg: "Frontend AKS: http://{{ frontend_svc.resources[0].status.loadBalancer.ingress[0].ip }}"
+
+# Forzar descarga de imagen nueva desde ACR
+- name: "AKS | Forzar actualización del Deployment frontend"
+  kubernetes.core.k8s:
+    state: patched
+    kind: Deployment
+    name: "{{ app.frontend.name }}"
+    namespace: "{{ app_namespace }}"
+    definition:
+      spec:
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/restartedAt: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
+
+- name: "AKS | Esperar que el rollout complete"
+  kubernetes.core.k8s_info:
+    kind: Deployment
+    name: "{{ app.frontend.name }}"
+    namespace: "{{ app_namespace }}"
+  register: deploy_info
+  until: >
+    deploy_info.resources[0].status.updatedReplicas is defined and
+    deploy_info.resources[0].status.updatedReplicas == deploy_info.resources[0].spec.replicas and
+    deploy_info.resources[0].status.availableReplicas == deploy_info.resources[0].spec.replicas
+  retries: 18
+  delay: 10

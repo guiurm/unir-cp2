@@ -1,8 +1,10 @@
+# Ficheros con credenciales — NUNCA subir al repositorio
 ansible/secrets.yml
 ansible/private_key.pem
 ansible/kubeconfig.yaml
 ansible/.build/
 
+# Ficheros de Terraform con valores reales
 terraform/terraform.tfvars
 terraform/.terraform/
 terraform/.terraform.lock.hcl
@@ -10,5 +12,6 @@ terraform/tfplan
 terraform/*.tfstate
 terraform/*.tfstate.backup
 
+# Ficheros temporales de Ansible
 *.retry
 ansible-debug.log

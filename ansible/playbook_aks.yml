@@ -1,0 +1,12 @@
+---
+# Playbook independiente - Fase 3: AKS
+# Uso: ansible-playbook -i inventory.ini playbook_aks.yml
+- name: "CP2 | Desplegar aplicación con persistencia en AKS"
+  hosts: kubernetes
+  gather_facts: false
+  vars_files:
+    - secrets.yml
+  tasks:
+    - name: Ejecutar rol AKS
+      ansible.builtin.include_role:
+        name: aks

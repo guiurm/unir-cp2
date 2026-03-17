@@ -1,0 +1,88 @@
+---
+# Rol VM: instala Podman, despliega Nginx desde ACR y lo registra como servicio systemd
+
+# --- Instalar Podman ---
+- name: "VM | Actualizar caché apt"
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: "VM | Instalar Podman"
+  ansible.builtin.apt:
+    name: podman
+    state: present
+
+# --- Login en ACR ---
+- name: "VM | Login en Azure Container Registry"
+  containers.podman.podman_login:
+    registry: "{{ acr_login_server }}"
+    username: "{{ acr_username }}"
+    password: "{{ acr_password }}"
+  no_log: true
+
+- name: "VM | Parar servicio systemd del contenedor"
+  ansible.builtin.systemd:
+    name: "{{ web_systemd_service }}"
+    state: stopped
+  ignore_errors: true
+
+- name: "VM | Eliminar contenedor webserver anterior"
+  containers.podman.podman_container:
+    name: "{{ web_container_name }}"
+    state: absent
+  ignore_errors: true
+
+- name: "VM | Eliminar imagen webserver anterior"
+  containers.podman.podman_image:
+    name: "{{ acr_login_server }}/{{ web_image_name }}:{{ container_image_tag }}"
+    state: absent
+  ignore_errors: true
+
+# --- Descargar imagen del ACR ---
+- name: "VM | Pull imagen webserver desde ACR"
+  containers.podman.podman_image:
+    name: "{{ acr_login_server }}/{{ web_image_name }}:{{ container_image_tag }}"
+    state: present
+
+# --- Arrancar contenedor ---
+- name: "VM | Arrancar contenedor Nginx"
+  containers.podman.podman_container:
+    name: "{{ web_container_name }}"
+    image: "{{ acr_login_server }}/{{ web_image_name }}:{{ container_image_tag }}"
+    state: started
+    recreate: true
+    restart_policy: always
+    ports:
+      - "{{ web_container_port }}:443"
+
+- name: "VM | Esperar a que el contenedor esté en ejecución"
+  containers.podman.podman_container_info:
+    name: "{{ web_container_name }}"
+  register: container_info
+  until: container_info.containers[0].State.Running == true
+  retries: 10
+  delay: 3
+
+# --- Persistencia con systemd (requisito del enunciado) ---
+- name: "VM | Generar unit systemd para el contenedor"
+  containers.podman.podman_generate_systemd:
+    name: "{{ web_container_name }}"
+    dest: /etc/systemd/system
+    restart_policy: always
+    new: true
+
+- name: "VM | Recargar daemon systemd"
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: "VM | Habilitar e iniciar servicio systemd"
+  ansible.builtin.systemd:
+    name: "{{ web_systemd_service }}"
+    enabled: true
+    state: started
+
+# --- Verificación ---
+- name: "VM | URL de acceso al servidor web"
+  ansible.builtin.debug:
+    msg: "Servidor web: https://{{ ansible_host }}:{{ web_container_port }} (usuario: {{ web_basic_auth_user }})"
+

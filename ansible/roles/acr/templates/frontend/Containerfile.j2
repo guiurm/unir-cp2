@@ -1,0 +1,28 @@
+# Multi-stage build para Azure Voting App Frontend
+
+# Stage 1: instalar dependencias
+FROM docker.io/library/python:3.9 AS builder
+
+WORKDIR /app
+
+# Instalar dependencias
+RUN pip install --user --no-cache-dir flask redis
+
+# Stage 2: imagen final ligera
+FROM docker.io/library/python:3.9-slim
+
+WORKDIR /app
+
+# Copiar dependencias instaladas del stage 1
+COPY --from=builder /root/.local /root/.local
+
+# Copiar todo el contenido del contexto (azure-vote/)
+COPY . .
+
+ENV PATH=/root/.local/bin:$PATH
+ENV REDIS=backend
+
+EXPOSE 5000
+
+# CMD ["python", "main.py"]
+CMD ["python", "-c", "from main import app; app.run(host='0.0.0.0', port=5000)"]

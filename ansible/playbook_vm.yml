@@ -1,0 +1,13 @@
+---
+# Playbook independiente - Fase 2: VM
+# Uso: ansible-playbook -i inventory.ini playbook_vm.yml
+- name: "CP2 | Desplegar servidor web en VM con Podman"
+  hosts: web
+  gather_facts: true
+  become: true
+  vars_files:
+    - secrets.yml
+  tasks:
+    - name: Ejecutar rol VM
+      ansible.builtin.include_role:
+        name: vm

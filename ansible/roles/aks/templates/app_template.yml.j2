@@ -1,0 +1,107 @@
+# PersistentVolumeClaim para Redis
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{ app.backend.pvc_name }}"
+  namespace: "{{ app_namespace }}"
+spec:
+  accessModes:
+    - "{{ app.backend.access_mode }}"
+  resources:
+    requests:
+      storage: "{{ app.backend.storage }}"
+
+---
+
+# Deployment Redis (backend con almacenamiento persistente)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ app.backend.name }}"
+  namespace: "{{ app_namespace }}"
+spec:
+  replicas: {{ app.backend.replicas }}
+  selector:
+    matchLabels:
+      app: "{{ app.backend.name }}"
+  template:
+    metadata:
+      labels:
+        app: "{{ app.backend.name }}"
+    spec:
+      imagePullSecrets:
+        - name: "{{ acr_secret_name }}"
+      containers:
+        - name: "{{ app.backend.name }}"
+          image: "{{ app.backend.image }}"
+          ports:
+            - containerPort: {{ app.backend.port }}
+          volumeMounts:
+            - name: redis-storage
+              mountPath: /data
+      volumes:
+        - name: redis-storage
+          persistentVolumeClaim:
+            claimName: "{{ app.backend.pvc_name }}"
+
+---
+
+# Service ClusterIP para Redis (acceso interno desde el frontend)
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ app.backend.name }}"
+  namespace: "{{ app_namespace }}"
+spec:
+  selector:
+    app: "{{ app.backend.name }}"
+  ports:
+    - port: {{ app.backend.port }}
+      targetPort: {{ app.backend.port }}
+
+---
+
+# Deployment Azure Voting App (frontend Python/Flask)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ app.frontend.name }}"
+  namespace: "{{ app_namespace }}"
+spec:
+  replicas: {{ app.frontend.replicas }}
+  selector:
+    matchLabels:
+      app: "{{ app.frontend.name }}"
+  template:
+    metadata:
+      labels:
+        app: "{{ app.frontend.name }}"
+    spec:
+      imagePullSecrets:
+        - name: "{{ acr_secret_name }}"
+      containers:
+        - name: "{{ app.frontend.name }}"
+          image: "{{ app.frontend.image }}"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{ app.frontend.port }}
+          env:
+            # Nombre del Service de Redis — la app lo usa para conectarse
+            - name: REDIS
+              value: "{{ app.backend.name }}"
+
+---
+
+# Service LoadBalancer para el frontend (acceso desde Internet)
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ app.frontend.name }}"
+  namespace: "{{ app_namespace }}"
+spec:
+  type: "{{ app.frontend.service_type }}"
+  selector:
+    app: "{{ app.frontend.name }}"
+  ports:
+    - port: 80
+      targetPort: {{ app.frontend.port }}

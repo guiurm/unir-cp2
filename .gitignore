@@ -1,0 +1,14 @@
+ansible/secrets.yml
+ansible/private_key.pem
+ansible/kubeconfig.yaml
+ansible/.build/
+
+terraform/terraform.tfvars
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/tfplan
+terraform/*.tfstate
+terraform/*.tfstate.backup
+
+*.retry
+ansible-debug.log
